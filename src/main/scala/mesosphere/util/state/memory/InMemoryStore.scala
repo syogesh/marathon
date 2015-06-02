@@ -21,16 +21,20 @@ class InMemoryStore(implicit val ec: ExecutionContext = ThreadPoolContext.contex
 
   override def create(key: ID, content: Array[Byte]): Future[PersistentEntity] = Future.successful {
     if (entities.contains(key)) throw new StoreCommandFailedException(s"Entity with id $key already exists!")
-    val entity = InMemoryEntity(key, content)
+    val entity = InMemoryEntity(key, 0, content)
     entities += key -> entity
     entity
   }
 
   override def save(entity: PersistentEntity): Future[PersistentEntity] = {
     entity match {
-      case e @ InMemoryEntity(id, _) =>
-        entities += id -> e
-        Future.successful(e)
+      case e @ InMemoryEntity(id, version, _) =>
+        if (entities(id).version != version) {
+          throw new StoreCommandFailedException(s"Concurrent updates! Version differs")
+        }
+        val update = e.incrementVersion
+        entities += id -> update
+        Future.successful(update)
       case _ => Future.failed(new IllegalArgumentException(s"Wrong entity type: $entity"))
     }
   }
@@ -47,6 +51,7 @@ class InMemoryStore(implicit val ec: ExecutionContext = ThreadPoolContext.contex
   override def allIds(): Future[Seq[ID]] = Future.successful(entities.keySet.toSeq)
 }
 
-case class InMemoryEntity(id: String, bytes: Array[Byte] = Array.empty) extends PersistentEntity {
+case class InMemoryEntity(id: String, version: Int, bytes: Array[Byte] = Array.empty) extends PersistentEntity {
   override def mutate(bytes: Array[Byte]): PersistentEntity = copy(bytes = bytes)
+  def incrementVersion: InMemoryEntity = copy(version = version + 1)
 }
