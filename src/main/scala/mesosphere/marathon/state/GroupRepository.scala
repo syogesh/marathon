@@ -4,7 +4,7 @@ import com.codahale.metrics.MetricRegistry
 import scala.concurrent.Future
 
 class GroupRepository(
-  val store: PersistenceStore[Group],
+  val store: EntityStore[Group],
   appRepo: AppRepository,
   val maxVersions: Option[Int] = None,
   val registry: MetricRegistry)
