@@ -65,7 +65,7 @@ class MarathonStoreTest extends MarathonSpec with Matchers {
     when(variable.bytes).thenReturn(appDef.toProtoByteArray)
     when(variable.mutate(any())).thenReturn(newVariable)
     when(state.load("app:testApp")).thenReturn(Future.successful(Some(variable)))
-    when(state.save(newVariable)).thenReturn(Future.successful(newVariable))
+    when(state.update(newVariable)).thenReturn(Future.successful(newVariable))
 
     val store = new MarathonStore[AppDefinition](state, registry, () => AppDefinition())
     val res = store.modify("testApp") { _ =>
@@ -74,7 +74,7 @@ class MarathonStoreTest extends MarathonSpec with Matchers {
 
     assert(newAppDef == Await.result(res, 5.seconds), "Should return the new AppDef")
     verify(state).load("app:testApp")
-    verify(state).save(newVariable)
+    verify(state).update(newVariable)
   }
 
   test("ModifyFail") {
@@ -91,7 +91,7 @@ class MarathonStoreTest extends MarathonSpec with Matchers {
     when(variable.bytes).thenReturn(appDef.toProtoByteArray)
     when(variable.mutate(any())).thenReturn(newVariable)
     when(state.load("app:testApp")).thenReturn(Future.successful(Some(variable)))
-    when(state.save(newVariable)).thenReturn(Future.failed(new StoreCommandFailedException("failed")))
+    when(state.update(newVariable)).thenReturn(Future.failed(new StoreCommandFailedException("failed")))
 
     val store = new MarathonStore[AppDefinition](state, registry, () => AppDefinition())
     val res = store.modify("testApp") { _ =>
@@ -105,15 +105,14 @@ class MarathonStoreTest extends MarathonSpec with Matchers {
 
   test("Expunge") {
     val state = mock[PersistentStore]
-    val variable = mock[PersistentEntity]
     val config = new ScallopConf(Seq("--master", "foo")) with MarathonConf
     config.afterInit()
 
-    when(state.delete("app:testApp")).thenReturn(Future.successful(variable))
+    when(state.delete("app:testApp")).thenReturn(Future.successful(true))
     val store = new MarathonStore[AppDefinition](state, registry, () => AppDefinition())
     val res = store.expunge("testApp")
 
-    assert(Await.result(res, 5.seconds), "Expunging existing variable should return true")
+    Await.ready(res, 5.seconds)
     verify(state).delete("app:testApp")
   }
 
@@ -140,7 +139,7 @@ class MarathonStoreTest extends MarathonSpec with Matchers {
 
     def populate(key: String, value: Array[Byte]) = {
       state.load(key).futureValue match {
-        case Some(ent) => state.save(ent.mutate(value)).futureValue
+        case Some(ent) => state.update(ent.mutate(value)).futureValue
         case None      => state.create(key, value).futureValue
       }
     }

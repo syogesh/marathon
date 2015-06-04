@@ -4,6 +4,7 @@ import mesosphere.marathon.StoreCommandFailedException
 import mesosphere.util.ThreadPoolContext
 import mesosphere.util.state.{ PersistentEntity, PersistentStore }
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ ExecutionContext, Future }
 
 /**
@@ -13,38 +14,38 @@ import scala.concurrent.{ ExecutionContext, Future }
   */
 class InMemoryStore(implicit val ec: ExecutionContext = ThreadPoolContext.context) extends PersistentStore {
 
-  var entities = Map.empty[ID, InMemoryEntity]
+  private[this] val entities = TrieMap.empty[ID, InMemoryEntity]
 
   override def load(key: ID): Future[Option[PersistentEntity]] = Future.successful{
     entities.get(key)
   }
 
-  override def create(key: ID, content: Array[Byte]): Future[PersistentEntity] = Future.successful {
+  override def create(key: ID, content: Array[Byte]): Future[PersistentEntity] = Future {
     if (entities.contains(key)) throw new StoreCommandFailedException(s"Entity with id $key already exists!")
     val entity = InMemoryEntity(key, 0, content)
-    entities += key -> entity
+    entities.put(key, entity)
     entity
   }
 
-  override def save(entity: PersistentEntity): Future[PersistentEntity] = {
+  override def update(entity: PersistentEntity): Future[PersistentEntity] = Future {
     entity match {
       case e @ InMemoryEntity(id, version, _) =>
         if (entities(id).version != version) {
           throw new StoreCommandFailedException(s"Concurrent updates! Version differs")
         }
         val update = e.incrementVersion
-        entities += id -> update
-        Future.successful(update)
-      case _ => Future.failed(new IllegalArgumentException(s"Wrong entity type: $entity"))
+        entities.replace(id, update)
+        update
+      case _ => throw new IllegalArgumentException(s"Wrong entity type: $entity")
     }
   }
 
-  override def delete(key: ID): Future[PersistentEntity] = {
+  override def delete(key: ID): Future[Boolean] = {
     entities.get(key) match {
       case Some(value) =>
-        entities -= key
-        Future.successful(value)
-      case None => Future.failed(new StoreCommandFailedException("No entity with this id"))
+        entities.remove(key)
+        Future.successful(true)
+      case None => Future.successful(false)
     }
   }
 

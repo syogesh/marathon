@@ -17,7 +17,7 @@ import mesosphere.util.state.{ PersistentEntity, PersistentStore }
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{ Await, Future }
-import scala.util.{ Failure, Success, Try }
+import scala.util.{ Failure, Success }
 
 class Migration @Inject() (
     store: PersistentStore,
@@ -84,7 +84,7 @@ class Migration @Inject() (
   def storeCurrentVersion: Future[StorageVersion] = {
     val bytes = StorageVersions.current.toByteArray
     store.load(storageVersionName).flatMap {
-      case Some(entity) => store.save(entity.mutate(bytes))
+      case Some(entity) => store.update(entity.mutate(bytes))
       case None         => store.create(storageVersionName, bytes)
     }.map{ _ => StorageVersions.current }
   }

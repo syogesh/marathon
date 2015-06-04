@@ -23,6 +23,12 @@ parameters.
 WARNING: If you use the `http_endpoints` parameter with multiple space
 separated URLs, you will need to migrate to the comma-separated format.
 
+#### Removed deprecated command line arguments `zk_hosts` and `zk_state`
+
+The command line arguments `zk_hosts` and `zk_state` were deprecated for some time and got removed in this version.
+Use the `--zk` command line argument to define the zookeeper connection string. 
+
+
 ## Changes from 0.8.1 to 0.8.2
 
 #### New health check option `ignoreHttp1xx`

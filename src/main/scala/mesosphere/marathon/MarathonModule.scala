@@ -1,5 +1,6 @@
 package mesosphere.marathon
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Named
@@ -24,9 +25,10 @@ import mesosphere.marathon.state._
 import mesosphere.marathon.tasks.{ TaskIdUtil, TaskQueue, TaskTracker, _ }
 import mesosphere.marathon.upgrade.DeploymentPlan
 import mesosphere.util.SerializeExecution
+import mesosphere.util.state.memory.InMemoryStore
 import mesosphere.util.state.mesos.MesosStateStore
 import mesosphere.util.state.zk.ZKStore
-import mesosphere.util.state.{ FrameworkIdUtil, PersistentStore }
+import mesosphere.util.state.{ FrameworkId, FrameworkIdUtil, PersistentStore }
 import org.apache.log4j.Logger
 import org.apache.mesos.state.ZooKeeperState
 import org.apache.zookeeper.ZooDefs
@@ -120,6 +122,7 @@ class MarathonModule(conf: MarathonConf, http: HttpConf, zk: ZooKeeperClient)
     conf.internalStoreBackend.get match {
       case Some("zk")       => directZK()
       case Some("mesos_zk") => mesosZK()
+      case Some("mem")      => new InMemoryStore()
       case backend          => throw new IllegalArgumentException(s"Storage backend $backend not known!")
     }
   }
@@ -260,8 +263,10 @@ class MarathonModule(conf: MarathonConf, http: HttpConf, zk: ZooKeeperClient)
 
   @Provides
   @Singleton
-  def provideFrameworkIdUtil(store: PersistentStore, registry: MetricRegistry): FrameworkIdUtil = {
-    new FrameworkIdUtil(store)
+  def provideFrameworkIdUtil(store: PersistentStore, registry: MetricRegistry, conf: MarathonConf): FrameworkIdUtil = {
+    new FrameworkIdUtil(
+      new MarathonStore[FrameworkId](store, registry, () => new FrameworkId(UUID.randomUUID().toString), ""),
+      conf.zkTimeoutDuration)
   }
 
   @Provides

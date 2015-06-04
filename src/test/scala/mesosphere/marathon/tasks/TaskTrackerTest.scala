@@ -321,7 +321,7 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, status)
 
-    verify(state, times(0)).save(any())
+    verify(state, times(0)).update(any())
   }
 
   test("Should not store if state and health did not change") {
@@ -342,7 +342,7 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, status)
 
-    verify(state, times(0)).save(any())
+    verify(state, times(0)).update(any())
   }
 
   test("Should store if state changed") {
@@ -366,7 +366,7 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, newStatus)
 
-    verify(state, times(1)).save(any())
+    verify(state, times(1)).update(any())
   }
 
   test("Should store if health changed") {
@@ -391,7 +391,7 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, newStatus)
 
-    verify(state, times(1)).save(any())
+    verify(state, times(1)).update(any())
   }
 
   test("Should store if state and health changed") {
@@ -417,7 +417,7 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, newStatus)
 
-    verify(state, times(1)).save(any())
+    verify(state, times(1)).update(any())
   }
 
   test("Should store if health changed (no health present at first)") {
@@ -441,7 +441,7 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, newStatus)
 
-    verify(state, times(1)).save(any())
+    verify(state, times(1)).update(any())
   }
 
   test("Should store if state and health changed (no health present at first)") {
@@ -466,6 +466,6 @@ class TaskTrackerTest extends MarathonSpec {
 
     taskTracker.statusUpdate(TEST_APP_NAME, newStatus)
 
-    verify(state, times(1)).save(any())
+    verify(state, times(1)).update(any())
   }
 }

@@ -263,7 +263,7 @@ class TaskTracker @Inject() (
     val bytes = byteStream.toByteArray
     val key: String = getKey(appId, task.getId)
     timedWrite(fetchFromState(key) match {
-      case Some(entity) => store.save(entity.mutate(bytes))
+      case Some(entity) => store.update(entity.mutate(bytes))
       case None         => store.create(key, bytes)
     })
   }

@@ -413,10 +413,7 @@ class SchedulerActions(
   }
 
   def stopApp(driver: SchedulerDriver, app: AppDefinition): Future[_] = {
-    appRepository.expunge(app.id).map { successes =>
-      if (!successes.forall(_ == true)) {
-        throw new StoreCommandFailedException(s"Error expunging ${app.id}")
-      }
+    appRepository.expunge(app.id).map { _ =>
 
       healthCheckManager.removeAllFor(app.id)
 

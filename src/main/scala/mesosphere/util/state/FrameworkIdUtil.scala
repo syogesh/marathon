@@ -1,58 +1,35 @@
 package mesosphere.util.state
 
-import org.apache.mesos.Protos.{ FrameworkInfo => FrameworkInfoProto, FrameworkID => FrameworkIDProto }
-import com.google.protobuf.InvalidProtocolBufferException
-import java.util.logging.{ Level, Logger }
+import mesosphere.marathon.state.{ MarathonState, MarathonStore }
+import org.apache.mesos.Protos
+import org.apache.mesos.Protos.FrameworkID
+
+import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.util.{ Failure, Success }
-import scala.concurrent.{ Future, Await, ExecutionContext }
 
 /**
-  * Utility class for keeping track of a framework ID in Mesos state.
-  *
-  * @param state State implementation
-  * @param key The key to store the framework ID under
+  * Utility class for keeping track of a framework ID
   */
-
-class FrameworkIdUtil(val state: PersistentStore, val key: String = "frameworkId") {
-
-  private val log = Logger.getLogger(getClass.getName)
-
-  def fetch(implicit ec: ExecutionContext, timeout: Duration): Option[FrameworkIDProto] = {
-    val f: Future[Option[FrameworkIDProto]] = state.load(key).map {
-      case Some(variable) =>
-        try {
-          val frameworkId = FrameworkIDProto.parseFrom(variable.bytes)
-          Some(frameworkId)
-        }
-        catch {
-          case e: InvalidProtocolBufferException =>
-            log.warning("Failed to parse framework ID")
-            None
-        }
-      case _ => None
-    }
-    Await.result(f, timeout)
+class FrameworkIdUtil(mStore: MarathonStore[FrameworkId], timeout: Duration, key: String = "frameworkId") {
+  def fetch(): Option[FrameworkID] = {
+    Await.result(mStore.fetch(key), timeout).map(_.toProto)
   }
-
-  def store(frameworkId: FrameworkIDProto)(implicit ec: ExecutionContext, timeout: Duration) {
-    state.load(key).map {
-      case Some(variable) => state.save(variable.mutate(frameworkId.toByteArray))
-      case None           => state.create(key, frameworkId.toByteArray)
-    }.onComplete {
-      case Success(_) => log.info("Stored framework ID '%s'".format(frameworkId.getValue))
-      case Failure(t) => log.log(Level.WARNING, "Failed to store framework ID", t)
-    }
+  def store(proto: FrameworkID): FrameworkId = {
+    val frameworkId = FrameworkId(proto.getValue)
+    Await.result(mStore.modify(key) { _ => frameworkId }, timeout)
   }
+}
 
-  def setIdIfExists(frameworkInfo: FrameworkInfoProto.Builder)(implicit ec: ExecutionContext, timeout: Duration) {
-    fetch match {
-      case Some(id) =>
-        log.info("Setting framework ID to %s".format(id.getValue))
-        frameworkInfo.setId(id)
-      case None =>
-        log.info("No previous framework ID found")
-    }
+//TODO: move logic from FrameworkID to FrameworkId (which also implies moving this class)
+case class FrameworkId(id: String) extends MarathonState[Protos.FrameworkID, FrameworkId] {
+  override def mergeFromProto(message: FrameworkID): FrameworkId = {
+    FrameworkId(message.getValue)
+  }
+  override def mergeFromProto(bytes: Array[Byte]): FrameworkId = {
+    mergeFromProto(Protos.FrameworkID.parseFrom(bytes))
+  }
+  override def toProto: FrameworkID = {
+    Protos.FrameworkID.newBuilder().setValue(id).build()
   }
 }
 

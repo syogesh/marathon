@@ -16,13 +16,14 @@ import org.apache.zookeeper.KeeperException.NoNodeException
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ Await, Future, Promise }
+import scala.util.control.NonFatal
 
 class ZKStore(val client: ZkClient, rootNode: ZNode) extends PersistentStore {
 
   private[this] val log = Logger.getLogger(getClass)
   private[this] implicit val ec = ThreadPoolContext.context
 
-  val root = createPath(rootNode)
+  val root = createPathBlocking(rootNode)
 
   /**
     * Fetch data and return entity.
@@ -30,19 +31,19 @@ class ZKStore(val client: ZkClient, rootNode: ZNode) extends PersistentStore {
     */
   override def load(key: ID): Future[Option[ZKEntity]] = {
     val node = root(key)
-    require(node.parent == root, "Nested paths are not supported!")
+    require(node.parent == root, s"Nested paths are not supported: $key!")
     node.getData().asScala
-      .map{ data => Some(ZKEntity(node, ZKData(data.bytes), Some(data.stat.getVersion))) }
+      .map { data => Some(ZKEntity(node, ZKData(data.bytes), Some(data.stat.getVersion))) }
       .recover { case ex: NoNodeException => None }
       .recover(exceptionTransform(s"Could not load key $key"))
   }
 
   override def create(key: ID, content: Array[Byte]): Future[ZKEntity] = {
     val node = root(key)
-    require(node.parent == root, "Nested paths are not supported!")
+    require(node.parent == root, s"Nested paths are not supported: $key")
     val data = ZKData(key, UUID.randomUUID(), content)
     node.create(data.toProto.toByteArray).asScala
-      .map(n => ZKEntity(n, data, Some(0))) //first version after create is 0
+      .map { n => ZKEntity(n, data, Some(0)) } //first version after create is 0
       .recover(exceptionTransform(s"Can not create entity $key"))
   }
 
@@ -51,29 +52,25 @@ class ZKStore(val client: ZkClient, rootNode: ZNode) extends PersistentStore {
     * The entity will be either created or updated, depending on the read state.
     * @return Some value, if the store operation is successful otherwise None
     */
-  override def save(entity: PersistentEntity): Future[ZKEntity] = {
+  override def update(entity: PersistentEntity): Future[ZKEntity] = {
     val zk = zkEntity(entity)
-    def update(version: Int): Future[ZKEntity] = {
-      zk.node.setData(zk.data.toProto.toByteArray, version).asScala
-        .map { data => zk.copy(version = Some(data.stat.getVersion)) }
-        .recover(exceptionTransform(s"Can not update entity $entity"))
-    }
-    def create(): Future[ZKEntity] = {
-      zk.node.create(zk.data.toProto.toByteArray).asScala
-        .flatMap { _.getData().map{ data => zk.copy(version = Some(data.stat.getVersion)) }.asScala }
-        .recover(exceptionTransform(s"Can not update entity $entity"))
-    }
-    zk.version.map(update).getOrElse(create())
+    val version = zk.version.getOrElse (
+      throw new StoreCommandFailedException(s"Can not store entity $entity, since there is no version!")
+    )
+    zk.node.setData(zk.data.toProto.toByteArray, version).asScala
+      .map { data => zk.copy(version = Some(data.stat.getVersion)) }
+      .recover(exceptionTransform(s"Can not update entity $entity"))
   }
 
   /**
     * Delete an entry with given identifier.
     */
-  override def delete(key: ID): Future[ZKEntity] = {
+  override def delete(key: ID): Future[Boolean] = {
     val node = root(key)
-    require(node.parent == root, "Nested paths are not supported!")
+    require(node.parent == root, s"Nested paths are not supported: $key")
     node.exists().asScala
-      .flatMap { d => node.delete(d.stat.getVersion).asScala.map(n => ZKEntity(n, ZKData(key, UUID.randomUUID()))) }
+      .flatMap { d => node.delete(d.stat.getVersion).asScala.map(_ => true) }
+      .recover { case ex: NoNodeException => false }
       .recover(exceptionTransform(s"Can not delete entity $key"))
   }
 
@@ -83,19 +80,19 @@ class ZKStore(val client: ZkClient, rootNode: ZNode) extends PersistentStore {
       .recover(exceptionTransform("Can not list all identifiers"))
   }
 
-  private def exceptionTransform[T](errorMessage: String): PartialFunction[Throwable, T] = {
+  private[this] def exceptionTransform[T](errorMessage: String): PartialFunction[Throwable, T] = {
     case ex: KeeperException => throw new StoreCommandFailedException(errorMessage, ex)
-    case ex: Throwable       => throw ex
+    case NonFatal(ex)        => throw ex
   }
 
-  private def zkEntity(entity: PersistentEntity): ZKEntity = {
+  private[this] def zkEntity(entity: PersistentEntity): ZKEntity = {
     entity match {
       case zk: ZKEntity => zk
-      case _            => throw new IllegalArgumentException("Can not handle this kind of entity")
+      case _            => throw new IllegalArgumentException(s"Can not handle this kind of entity: ${entity.getClass}")
     }
   }
 
-  private def createPath(path: ZNode): ZNode = {
+  private[this] def createPathBlocking(path: ZNode): ZNode = {
     def createParent(node: ZNode): ZNode = {
       val exists = Await.result(node.exists().asScala.map(_ => true)
         .recover { case ex: NoNodeException => false }

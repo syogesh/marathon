@@ -35,13 +35,12 @@ class InfoResource @Inject() (
     "mesos_user" -> conf.mesosUser.get)
 
   // Zookeeper congiurations
-  private[this] lazy val zookeeperConfigValues = Map(
-    "zk_timeout" -> conf.zooKeeperTimeout.get,
-    "zk" -> conf.zooKeeperUrl.get,
-    "zk_hosts" -> conf.zkHosts,
-    "zk_path" -> conf.zkPath,
-    "zk_timeout" -> conf.zkTimeoutDuration,
-    "zk_future_timeout" -> conf.zkTimeoutDuration)
+  private[this] lazy val zookeeperConfigValues = Map[String, Any] (
+    "zk" -> conf.zooKeeperUrl(),
+    "zk_timeout" -> conf.zooKeeperTimeout(),
+    "zk_session_timeout" -> conf.zooKeeperSessionTimeout(),
+    "zk_max_versions" -> conf.zooKeeperMaxVersions()
+  )
 
   private[this] lazy val eventHandlerConfigValues = {
     def httpEventConfig: Map[String, Option[Seq[String]]] = Map(

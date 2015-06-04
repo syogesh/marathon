@@ -41,26 +41,35 @@ trait PersistentStore {
 
   /**
     * Create a new entity with given id and content.
+    * This will result in a StoreCommandFailedException if an entity with this key already exists.
     * @param key the identifier of this entity.
     * @param content the content of this entity.
+    * @throws mesosphere.marathon.StoreCommandFailedException
+    *         in the case of an existing entity or underlying store problems.
     */
   def create(key: ID, content: Array[Byte]): Future[PersistentEntity]
 
   /**
     * Store the given entity.
+    * Since the update relates to a given PersistentEntity, the underlying storage might
+    * check the read version to prevent concurrent modifications.
     * @param entity the entity to store
     * @return either the entity or a failure.
     *         In case of a storage specific failure, a StoreCommandFailedException is thrown.
+    * @throws mesosphere.marathon.StoreCommandFailedException
+    *         in the case of concurrent modifications or underlying store problems.
     */
-  def save(entity: PersistentEntity): Future[PersistentEntity]
+  def update(entity: PersistentEntity): Future[PersistentEntity]
 
   /**
     * Expunge the entity with given id.
     * @param key the key identifier
-    * @return either the entity or a failure.
+    * @return true if the entity was deleted and false if not existent.
     *         In case of a storage specific failure, a StoreCommandFailedException is thrown.
+    * @throws mesosphere.marathon.StoreCommandFailedException
+    *         if the item could not get deleted or underlying store problems.
     */
-  def delete(key: ID): Future[PersistentEntity]
+  def delete(key: ID): Future[Boolean]
 
   /**
     * List all available identifier.

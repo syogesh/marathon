@@ -5,15 +5,16 @@ import java.util.{ Timer, TimerTask }
 
 import akka.actor.{ ActorRef, ActorSystem }
 import akka.testkit.{ TestKit, TestProbe }
+import com.codahale.metrics.MetricRegistry
 import com.twitter.common.base.ExceptionalCommand
 import com.twitter.common.zookeeper.Group.JoinException
 import com.twitter.common.zookeeper.{ Candidate, Group }
 import mesosphere.chaos.http.HttpConf
 import mesosphere.marathon.Protos.StorageVersion
 import mesosphere.marathon.health.HealthCheckManager
-import mesosphere.marathon.state.{ AppRepository, Migration }
+import mesosphere.marathon.state.{ MarathonStore, AppRepository, Migration }
 import mesosphere.marathon.tasks.TaskTracker
-import mesosphere.util.state.FrameworkIdUtil
+import mesosphere.util.state.{ FrameworkId, FrameworkIdUtil }
 import mesosphere.util.state.memory.InMemoryStore
 import org.apache.mesos.{ Protos => mesos, SchedulerDriver }
 import org.mockito.Matchers.{ any, eq => mockEq }
@@ -99,7 +100,7 @@ class MarathonSchedulerServiceTest
   test("Start timer when elected") {
     val mockTimer = mock[Timer]
 
-    when(frameworkIdUtil.fetch(any(), any())).thenReturn(None)
+    when(frameworkIdUtil.fetch()).thenReturn(None)
 
     val schedulerService = new MarathonSchedulerService(
       healthCheckManager,
@@ -128,7 +129,7 @@ class MarathonSchedulerServiceTest
   test("Cancel timer when defeated") {
     val mockTimer = mock[Timer]
 
-    when(frameworkIdUtil.fetch(any(), any())).thenReturn(None)
+    when(frameworkIdUtil.fetch()).thenReturn(None)
 
     val schedulerService = new MarathonSchedulerService(
       healthCheckManager,
@@ -157,7 +158,7 @@ class MarathonSchedulerServiceTest
   test("Re-enable timer when re-elected") {
     val mockTimer = mock[Timer]
 
-    when(frameworkIdUtil.fetch(any(), any())).thenReturn(None)
+    when(frameworkIdUtil.fetch()).thenReturn(None)
 
     val schedulerService = new MarathonSchedulerService(
       healthCheckManager,
@@ -192,7 +193,9 @@ class MarathonSchedulerServiceTest
     val frameworkId = mesos.FrameworkID.newBuilder.setValue("myId").build()
     val mockTimer = mock[Timer]
 
-    frameworkIdUtil = new FrameworkIdUtil(new InMemoryStore)
+    val metrics = new MetricRegistry
+    val store = new MarathonStore[FrameworkId](new InMemoryStore, metrics, () => new FrameworkId(""))
+    frameworkIdUtil = new FrameworkIdUtil(store, Duration.Inf)
 
     val schedulerService = new MarathonSchedulerService(
       healthCheckManager,
@@ -220,7 +223,7 @@ class MarathonSchedulerServiceTest
   }
 
   test("Abdicate leadership when migration fails and reoffer leadership") {
-    when(frameworkIdUtil.fetch(any(), any())).thenReturn(None)
+    when(frameworkIdUtil.fetch()).thenReturn(None)
     candidate = Some(mock[Candidate])
 
     val schedulerService = new MarathonSchedulerService(
